@@ -96,10 +96,12 @@ fun main(args: Array<String>) {
         exitProcess(0x5)
     }
 
+    //  Load configuration
     EVER.loadConfiguration(config.apiConfig)
 
     logger.info("Configuration loaded...")
 
+    //  Get airdrop giver address
     val giver: String = (config.airdropGiverAddress ?: runBlocking {
         logger.info("Creating airdrop giver address...")
         i = 1
@@ -120,6 +122,7 @@ fun main(args: Array<String>) {
 
     logger.info("Tokens will be sent from address $brightGreen$giver$reset")
 
+    //  Calculate required ÊVER amount
     val requiredEverBalance = (0.5 * airdropList.size + 1.0).toBigDecimal()
     var currentEverBalance = getAddressBalance(giver).divide(EVER_DECIMALS)
 
@@ -130,13 +133,14 @@ fun main(args: Array<String>) {
                     "\tCurrent :\t$currentEverBalance EVER\n" +
                     "\tMissing :\t${requiredEverBalance - currentEverBalance} EVER\n$reset"
         )
-        print("Press ${brightGreen}[ENTER]$reset after you refill the balance >")
+        print("\nPress ${brightGreen}[ENTER]$reset after you refill the balance > ")
         readln()
         currentEverBalance = getAddressBalance(giver).divide(EVER_DECIMALS)
     }
 
     logger.info("Gas balance is sufficient: $brightGreen$currentEverBalance EVER$reset")
 
+    //  Calculate required token amount
     val TOKEN_DECIMALS = BigDecimal(10).pow(config.token.decimals)
     val requiredTokenBalance = airdropList.map { it.value }.sumOf { it }.multiply(TOKEN_DECIMALS)
     var currentTokenBalance =
@@ -148,13 +152,22 @@ fun main(args: Array<String>) {
                     "\tCurrent :\t${currentTokenBalance.divide(TOKEN_DECIMALS)}\n" +
                     "\tMissing :\t${(requiredTokenBalance - currentTokenBalance).divide(TOKEN_DECIMALS)}\n$reset"
         )
-        print("Press ${brightGreen}[ENTER]$reset after you refill the token balance >")
+        print("\nPress ${brightGreen}[ENTER]$reset after you refill the token balance > ")
         readln()
         currentTokenBalance =
             getAddressTokenBalance(giver, config.token.rootAddress).stripTrailingZeros()
     }
 
     logger.info("Token balance is sufficient: $brightGreen${currentTokenBalance.divide(TOKEN_DECIMALS)}$reset")
+
+    print("\nInitiate transfers? ${brightGreen}[Y/n]$reset > ")
+    readlnOrNull()?.let {
+        if(it.lowercase().trim() == "n") {
+            println("Airdrop was cancelled by the user.")
+            exitProcess(0x6)
+        }
+    }
+
     logger.info("Initiating transfers...")
 
     val result: MutableList<AirdropResult> = airdropList
