@@ -4,6 +4,7 @@ import com.mazekine.everscale.EVER
 import com.mazekine.everscale.models.AccountType
 import com.mazekine.everscale.models.TokenTransactionStatus
 import com.mazekine.everscale.models.TransactionStatus
+import io.ktor.util.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -11,8 +12,10 @@ import models.Config
 import org.slf4j.LoggerFactory
 import java.io.File
 import java.math.BigDecimal
+import java.math.RoundingMode
 import kotlin.io.path.Path
 import kotlin.io.path.createDirectories
+import kotlin.math.log
 import kotlin.system.exitProcess
 
 val EVER_DECIMALS = BigDecimal(1_000_000_000)
@@ -51,14 +54,15 @@ fun main(args: Array<String>) {
                         exitProcess(0x2)
                     }
 
+                    logger.info("Analyzing source file...")
                     val rawText = sourceFile.readText().replace("\r", "").trim()
+                    val validatedList = rawText.toValidatedListOrNull() ?: run {
+                        println()
+                        logger.error("Source file contains errors. Please fix them and rerun the script.")
+                        exitProcess(0x7)
+                    }
 
-                    airdropList.putAll(
-                        rawText.split("\n").map {
-                            val (address, amount) = it.split(",", "\t", ";")
-                            address to amount.toBigDecimal()
-                        }
-                    )
+                    airdropList.putAll(validatedList)
 
                     i++
                 }
@@ -94,6 +98,10 @@ fun main(args: Array<String>) {
     if (config == null) {
         logger.error("${brightRed}Configuration is missing$reset")
         exitProcess(0x5)
+    }
+
+    airdropList.forEach { key, value ->
+        airdropList[key] = value.setScale(config.token.decimals, RoundingMode.HALF_EVEN)
     }
 
     //  Load configuration
@@ -162,7 +170,7 @@ fun main(args: Array<String>) {
 
     print("\nInitiate transfers? ${brightGreen}[Y/n]$reset > ")
     readlnOrNull()?.let {
-        if(it.lowercase().trim() == "n") {
+        if (it.lowercase().trim() == "n") {
             println("Airdrop was cancelled by the user.")
             exitProcess(0x6)
         }
@@ -333,3 +341,182 @@ data class AirdropResult(
     var txHash: String? = null,
     var result: TokenTransactionStatus
 )
+
+fun String.toValidatedListOrNull(): MutableMap<String, BigDecimal>? {
+    val logger = LoggerFactory.getLogger("toValidatedListOrNull")
+    val source = this.preProcessSourceData()
+
+    //  Check that list is not empty
+    if (source == "") {
+        println("${red}Source file is empty$reset")
+        return null
+    }
+
+    val result: MutableMap<String, BigDecimal> = mutableMapOf()
+    val lines: List<String> = source.split("\n")
+    val errorSymbols = 40
+    var containsErrors = false
+
+    lines.forEachIndexed { index, line ->
+        var pointer = -1
+        var prefix = ""
+        var problematicPlace = ""
+        var highlightLength = 1
+        var whiteSpace = 0
+        var errorMessage = ""
+
+        if(line.trim() == "") {
+            problematicPlace = ""
+            prefix = "Error: (${index + 1}, 1) "
+            whiteSpace = prefix.length
+            highlightLength = 1
+            errorMessage = "Unexpected empty line"
+
+            println("\n$red$prefix$problematicPlace")
+            println(" ".repeat(whiteSpace) + "^".repeat(highlightLength))
+            println(" ".repeat(whiteSpace) + errorMessage + reset)
+
+            containsErrors = true
+            return@forEachIndexed
+        }
+
+        //  Check that each line contains supported delimiters and splits exactly into two pieces
+        val columns = line.split(",", ";", "\t")
+
+        when (columns.size) {
+            1 -> {
+                problematicPlace = if (line.length > errorSymbols) "..." + line.takeLast(errorSymbols) else line
+                prefix = "Error: (${index + 1}, ${line.length + 1}) "
+                whiteSpace = prefix.length + problematicPlace.length
+                highlightLength = 1
+                errorMessage = "Expecting delimiter"
+
+                println("\n$red$prefix$problematicPlace")
+                println(" ".repeat(whiteSpace) + "^".repeat(highlightLength))
+                println(" ".repeat(whiteSpace) + errorMessage + reset)
+
+                containsErrors = true
+            }
+            2 -> {
+                //  Check that each line contains data in required format
+                val address = columns[0]
+                val amount = columns[1].toBigDecimalOrNull()
+
+                val addressCorrect = runBlocking { EVER.checkAddress(address) } ?: run {
+                    logger.error("Cannot validate the target address $address. Please check your network connection and API configuration...")
+                    containsErrors = true
+                    return@forEachIndexed
+                }
+
+                if (!addressCorrect) {
+                    prefix = "Error: (${index + 1}, 1) "
+                    highlightLength = address.length
+                    whiteSpace = prefix.length
+                    problematicPlace = if (line.length > errorSymbols) line.take(errorSymbols) + "..." else line
+                    errorMessage = "Incorrect address format"
+
+
+                    println("\n$red$prefix$problematicPlace")
+                    println(" ".repeat(whiteSpace) + "^".repeat(highlightLength))
+                    println(" ".repeat(whiteSpace) + errorMessage + reset)
+
+                    containsErrors = true
+                    return@forEachIndexed
+                }
+
+                if (amount == null) {
+                    pointer = address.length + 1
+                    highlightLength = columns[1].length
+
+                    val (start, end, newPointer) = line.getSubstringRange(pointer, errorSymbols)
+
+                    problematicPlace = line.substring(start, end + 1)
+                    if (start != 0) problematicPlace = "...$problematicPlace"
+                    if (end != line.lastIndex) problematicPlace += "..."
+
+                    prefix = "Error: (${index + 1}, ${pointer + 1}) "
+                    whiteSpace = prefix.length + newPointer
+                    errorMessage = "Amount should be numeric"
+
+                    println("\n$red$prefix$problematicPlace")
+                    println(" ".repeat(whiteSpace) + "^".repeat(highlightLength))
+                    println(" ".repeat(whiteSpace) + errorMessage + reset)
+
+                    containsErrors = true
+                    return@forEachIndexed
+                }
+
+                if(amount <= 0.toBigDecimal()) {
+                    pointer = address.length + 1
+                    highlightLength = columns[1].length
+
+                    val (start, end, newPointer) = line.getSubstringRange(pointer, errorSymbols)
+
+                    problematicPlace = line.substring(start, end + 1)
+                    if (start != 0) problematicPlace = "...$problematicPlace"
+                    if (end != line.lastIndex) problematicPlace += "..."
+
+                    prefix = "Error: (${index + 1}, ${pointer + 1}) "
+                    whiteSpace = prefix.length + newPointer
+                    errorMessage = "Amount should be positive"
+
+                    println("\n$red$prefix$problematicPlace")
+                    println(" ".repeat(whiteSpace) + "^".repeat(highlightLength))
+                    println(" ".repeat(whiteSpace) + errorMessage + reset)
+
+                    containsErrors = true
+                    return@forEachIndexed
+                }
+
+                result[address] = amount
+            }
+            else -> {
+                pointer = columns[0].length + columns[1].length + 1
+                highlightLength = 1
+                val (start, end, newPointer) = line.getSubstringRange(pointer, errorSymbols)
+                problematicPlace = line.substring(start, end + 1)
+                prefix = "Error: (${index + 1}, ${pointer + 1}) "
+
+                if (start != 0) problematicPlace = "...$problematicPlace"
+
+                if (end != line.lastIndex) problematicPlace += "..."
+
+                whiteSpace = prefix.length + newPointer
+
+                errorMessage = "Unexpected delimiter"
+
+                println("\n$red$prefix$problematicPlace")
+                println(" ".repeat(whiteSpace) + "^".repeat(highlightLength))
+                println(" ".repeat(whiteSpace) + errorMessage + reset)
+
+                containsErrors = true
+            }
+        }
+    }
+
+    return if (containsErrors) null else result
+}
+
+fun String.preProcessSourceData(): String = this.replace("\r", "").trim()
+
+fun String.getSubstringRange(pointer: Int, window: Int): Triple<Int, Int, Int> {
+    require(pointer >= 0 && pointer <= this.lastIndex) { "Incorrect pointer" }
+    require(window >= 1) { "Selection window must be longer than 1 symbol" }
+
+    var startIndex = 0
+    var endIndex = this.lastIndex
+    var newPointer = pointer
+
+    if (pointer + window / 2 < this.lastIndex) {
+        endIndex = pointer + window / 2
+    } else {
+        val leftWindow = window - (this.lastIndex - pointer)
+
+        if (pointer - leftWindow > 0) {
+            startIndex = pointer - leftWindow
+            newPointer = leftWindow + 3 //  Include ellipsis
+        }
+    }
+
+    return Triple(startIndex, endIndex, newPointer)
+}

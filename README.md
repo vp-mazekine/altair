@@ -29,6 +29,7 @@ ADDRESS,AMOUNT
 *Notes*
 * `AMOUNT` shall be specified in natural token units, i.e. if you want to send 2 USDT, indicate `2`
 * `AMOUNT` must not contain thousands separators or be specified in scientific notation
+* Only dot is considered as a valid decimal separator
 * Source file must not contain empty or invalid strings
 
 *Supported delimiters*
@@ -60,13 +61,13 @@ Configuration file is in JSON format:
 | ---  | --- | --- |
 | `token`.`root_address` | `address` | Root address of the token that you want to distribute |
 | `token`.`decimals` | `int` | Number of decimal places |
-| `airdrop_giver_address` | `address` | (Optional) Address, from which the distribution will be done.<br/>Altair will create a new address for airdrop each time, unless you specify a specific one.<br/><br/>⚠️ The specified address must be earlier created in Wallet API under your key. |
 | `api_config`.`endpoint` | `url` | Base address of the Broxus Wallet API instance |
 | `api_config`.`prefix` | `string` | Typically equals to `/ton/v3`. Change with caution |
 | `api_config`.`key` | `string` | API key |
 | `api_config`.`secret` | `string` | API secret for signing the calls |
-| `debug` | `boolean` | Reserved for future use, turns on debug mode |
-| `retry_attempts` | `int` | How many times the script will attempt to resend the failed transaction. Defaults to `5` |
+| `airdrop_giver_address` | `address` | *(Optional)* Address, from which the distribution will be done.<br/>Altair will create a new address for airdrop each time, unless you specify a concrete one.<br/><br/>⚠️ The specified address must be earlier created in Wallet API under your key. |
+| `debug` | `boolean` | *(Optional)* Reserved for future use, turns on debug mode |
+| `retry_attempts` | `int` | *(Optional)* How many times the script will attempt to resend the failed transaction. Defaults to `5` |
 
 ### Notes
 
