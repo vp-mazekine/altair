@@ -196,7 +196,8 @@ fun main(args: Array<String>) {
                             )
 
                             var tokenTxId: String? = null
-                            while (tokenTxId == null) {
+                            var counter: Int = config.retryAttempts
+                            while (tokenTxId == null && counter > 0) {
                                 tokenTxId = EVER.createTokenTransaction(
                                     giver,
                                     target.address,
@@ -218,6 +219,8 @@ fun main(args: Array<String>) {
                                         ).toPlainString()
                                     }$reset tokens to address $brightCyan${target.address}$reset..."
                                 )
+
+                                counter--
                             }
 
                             var tokenTxResult = EVER.getTransaction(txId = tokenTxId)

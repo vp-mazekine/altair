@@ -26,7 +26,12 @@ ADDRESS,AMOUNT
 ...
 ```
 
-Supported delimiters:
+*Notes*
+* `AMOUNT` shall be specified in natural token units, i.e. if you want to send 2 USDT, indicate `2`
+* `AMOUNT` must not contain thousands separators or be specified in scientific notation
+* Source file must not contain empty or invalid strings
+
+*Supported delimiters*
 * Comma
 * Semicolon
 * Tab
@@ -51,15 +56,17 @@ Configuration file is in JSON format:
 ```
 
 ##### Explanation of parameters
-| Name | Description |
-| ---  | --- |
-| `token`.`root_address` | Root address of the token that you want to distribute |
-| `token`.`decimals` | Number of decimal places |
-| `airdrop_giver_address` | (Optional) Address, from which the distribution will be done.<br/>Altair will create a new address for airdrop each time, unless you specify a specific one.<br/><br/>⚠️ The specified address must be earlier created in Wallet API under your key. |
-| `api_config`.`endpoint` | Base address of the Broxus Wallet API instance |
-| `api_config`.`prefix` | Typically equals to `/ton/v3`. Change with caution |
-| `api_config`.`key` | API key |
-| `api_config`.`secret` | API secret for signing the calls |
+| Name | Format | Description |
+| ---  | --- | --- |
+| `token`.`root_address` | `address` | Root address of the token that you want to distribute |
+| `token`.`decimals` | `int` | Number of decimal places |
+| `airdrop_giver_address` | `address` | (Optional) Address, from which the distribution will be done.<br/>Altair will create a new address for airdrop each time, unless you specify a specific one.<br/><br/>⚠️ The specified address must be earlier created in Wallet API under your key. |
+| `api_config`.`endpoint` | `url` | Base address of the Broxus Wallet API instance |
+| `api_config`.`prefix` | `string` | Typically equals to `/ton/v3`. Change with caution |
+| `api_config`.`key` | `string` | API key |
+| `api_config`.`secret` | `string` | API secret for signing the calls |
+| `debug` | `boolean` | Reserved for future use, turns on debug mode |
+| `retry_attempts` | `int` | How many times the script will attempt to resend the failed transaction. Defaults to `5` |
 
 ### Notes
 

@@ -14,6 +14,10 @@ data class Config(
     @Expose @SerializedName("api_config")
     val apiConfig: APIConfig,
 
+    @Expose @SerializedName("retry_attempts")
+    val retryAttempts: Int = 5,
+
+    @Expose
     val debug: Boolean = false
 )
 
